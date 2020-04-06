@@ -43,34 +43,37 @@ def partitioning(dim_x, dim_y, points, split):
     return partition
 
 
-def sample_actions(batch_policies, batch_size, dim):
+def sample_actions(batch_policies, batch_size, dim, arms):
     dists = tfp.distributions.Multinomial(total_count=1, probs=batch_policies)
     selection = dists.sample(1)
-    samples = tf.where(tf.reshape(selection, [batch_size, 3, dim, dim]))
-    return tf.reshape(tf.slice(samples, [0, 2], [batch_size*3, 2]), [batch_size, 3, 2]), tf.squeeze(selection)
+    samples = tf.where(tf.reshape(selection, [batch_size, 3, arms, dim, dim]))
+    return tf.reshape(tf.slice(samples, [0, 3], [batch_size*3*arms, 2]), [batch_size, arms, 3, 2]), tf.squeeze(selection)
 
 
-def calc_shares(pos, num_p1, num_p2, dim, batch_size):
-    _x = tf.tile(tf.expand_dims(tf.constant(np.reshape(np.arange(dim), (dim, 1, 1)),
-                                            dtype=tf.int64), 0), [batch_size, 1, 1, 1])
-    _y = tf.tile(tf.expand_dims(tf.constant(np.reshape(np.arange(dim), (1, dim, 1)),
-                                            dtype=tf.int64), 0), [batch_size, 1, 1, 1])
+def calc_shares(pos, num_p1, num_p2, dim, arms, batch_size):
+    _x = tf.tile(tf.expand_dims(tf.constant(np.reshape(np.arange(dim), (dim, 1, 1, 1)),
+                                            dtype=tf.int64), 0), [batch_size, 1, 1, 1, 1])
+    _y = tf.tile(tf.expand_dims(tf.constant(np.reshape(np.arange(dim), (1, dim, 1, 1)),
+                                            dtype=tf.int64), 0), [batch_size, 1, 1, 1, 1])
 
-    x = tf.abs(tf.reshape(tf.slice(pos, [0, 0, 0], [batch_size, num_p1 + num_p2, 1]), (batch_size, 1, 1, -1)) - _x)
+    x = tf.abs(tf.reshape(tf.slice(pos, [0, 0, 0, 0], [batch_size, arms, num_p1 + num_p2, 1]), (batch_size, 1, 1, arms, -1)) - _x)
 
-    y = tf.abs(tf.reshape(tf.slice(pos, [0, 0, 1], [batch_size, num_p1 + num_p2, 1]), (batch_size, 1, 1, -1)) - _y)
+    y = tf.abs(tf.reshape(tf.slice(pos, [0, 0, 0, 1], [batch_size, arms, num_p1 + num_p2, 1]), (batch_size, 1, 1, arms, -1)) - _y)
 
     distances = x + y
-    min_distances = tf.reduce_min(distances, axis=3, keepdims=True)
+    min_distances = tf.reduce_min(distances, axis=4, keepdims=True)
     diff_distances = distances - min_distances
     shares = tf.cast(tf.equal(diff_distances, 0), dtype=tf.int32)
-    shares = shares / tf.reduce_sum(shares, axis=3, keepdims=True)
+    shares = shares / tf.reduce_sum(shares, axis=4, keepdims=True)
 
-    return tf.cast(shares, dtype=tf.float64)
+    # return tf.cast(shares, dtype=tf.float64)
+    return tf.slice(tf.cast(shares, dtype=tf.float64), [0, 0, 0, 0, 0], [batch_size, dim, dim, arms, num_p1])
 
 
 def calc_rewards(utilities, shares):
-    rewards = shares * tf.expand_dims(utilities, axis=3)
+    utilities = tf.tile(tf.expand_dims(utilities, axis=3), [1, 1, 1, 2])
+    utilities = tf.tile(tf.expand_dims(utilities, axis=4), [1, 1, 1, 1, 1])
+    rewards = shares * utilities
     return tf.reduce_sum(rewards, axis=[1, 2])
 
 

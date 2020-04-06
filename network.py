@@ -37,8 +37,10 @@ class ResidualBlock(tf.keras.Model):
 
 
 class ResidualNetwork(tf.keras.Model):
-    def __init__(self, dim):
+    def __init__(self, dim, arms):
         super(ResidualNetwork, self).__init__()
+        self.num_arms = arms
+        self.dim = dim
 
         self.cnn_1 = tf.keras.layers.Conv2D(256, 3, 1,
                                        activation='relu',
@@ -50,9 +52,9 @@ class ResidualNetwork(tf.keras.Model):
 
         self.cnn_flat = tf.keras.layers.Flatten()
 
-        self.pi_1 = tf.keras.layers.Dense(units=dim**2, activation='softmax', use_bias=False)
-        self.pi_2 = tf.keras.layers.Dense(units=dim**2, activation='softmax', use_bias=False)
-        self.pi_3 = tf.keras.layers.Dense(units=dim**2, activation='softmax', use_bias=False)
+        self.pi_1 = tf.keras.layers.Dense(units=arms*(dim**2), activation='softmax', use_bias=False)
+        self.pi_2 = tf.keras.layers.Dense(units=arms*(dim**2), activation='softmax', use_bias=False)
+        self.pi_3 = tf.keras.layers.Dense(units=arms*(dim**2), activation='softmax', use_bias=False)
 
     def call(self, input_tensor, training=False):
         cnn_1 = self.cnn_1(input_tensor)
@@ -62,7 +64,10 @@ class ResidualNetwork(tf.keras.Model):
         cnn_flat = self.cnn_flat(rb_1)
 
         pi_1 = self.pi_1(cnn_flat)
+        pi_1 = tf.reshape(pi_1, [-1, self.num_arms, self.dim**2])
         pi_2 = self.pi_1(cnn_flat)
+        pi_2 = tf.reshape(pi_2, [-1, self.num_arms, self.dim**2])
         pi_3 = self.pi_1(cnn_flat)
+        pi_3 = tf.reshape(pi_3, [-1, self.num_arms, self.dim**2])
 
         return tf.stack([pi_1, pi_2, pi_3], axis=1)
