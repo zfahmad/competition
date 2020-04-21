@@ -14,10 +14,12 @@ import loss
 #     return dataset
 
 
-batch_size = 4
+batch_size = 32
 dim = 5
 arms = 2
-model = nn.ResidualNetwork(dim, arms=2)
+num_locs = 3
+model = nn.ResidualNetwork(dim, arms=arms)
+quantal_temp = 1
 # value_loss_function = tf.keras.losses.MSE
 # policy_loss_function = tf.keras.losses.categorical_crossentropy
 optimizer = tf.optimizers.Adam(1e-4)
@@ -34,48 +36,42 @@ model.build(input_shape=(batch_size, dim, dim, 1))
 # print(' {:^7} {:^8} {:^8} {:^8}'.format(*print_list))
 # print(36 * "=")
 
-for step in range(1):
+for step in range(5000):
     with tf.GradientTape() as tape:
         utilities = gm.generate_map(batch_size, dim, dim)
+
+        # Generate quantals for opponent
+
+        quantals = tf.nn.softmax(tf.reshape(quantal_temp * utilities, [batch_size, -1]))
+        opponent, op_selection = clc.sample_opponent(quantals, batch_size, dim)
+        opponent = tf.tile(tf.expand_dims(tf.expand_dims(opponent, axis=1), axis=2), [1, arms, 1, 1])
+        # print(opponent)
+
+        # indmax = tf.argmax(tf.reshape(utilities, [batch_size, -1]), axis=1)
+        # opponent = tf.expand_dims(tf.stack([tf.math.floordiv(indmax, dim), tf.math.floormod(indmax, dim)], axis=1), axis=1)
+        # opponent = tf.tile(tf.expand_dims(opponent, axis=2), [1, arms, 1, 1])
+        # print(opponent)
         inputs = tf.expand_dims(utilities, axis=3)
         policies = model(inputs, True)
-        samples, selection = clc.sample_actions(policies, batch_size, dim, arms)
+        # print(policies)
+        samples, selection = clc.sample_actions(policies, batch_size, num_locs, arms, dim)
         # print(samples)
-        # print(selection)
-        shares = clc.calc_shares(samples, 3, 0, dim, arms, batch_size)
-        rewards = clc.calc_rewards(utilities, shares)
+        pos = tf.concat([samples, opponent], axis=2)
+        # print(pos)
+        shares = clc.calc_shares(pos, num_locs, 1, dim, arms, batch_size)
+        rewards = clc.calc_rewards(utilities, shares, arms)
         probs = tf.transpose(tf.cast(tf.reduce_sum(policies * selection, axis=3), dtype=tf.float64), [0, 2, 1])
+        # print(probs)
 
         expected_utilities = tf.reduce_sum(rewards * probs, axis=2)
 
         mu = loss.marginal_utility(expected_utilities)
         expected_mr = tf.reduce_mean(tf.reduce_sum(mu, axis=1))
-        print(expected_mr)
         grads = tape.gradient(-expected_mr, model.trainable_variables)
-        # optimizer.apply_gradients(zip(grads, model.trainable_variables))
+        optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
-        # if not step % 500:
-        #     print('Step: {} Loss: {}'.format(step, expected_mr))
-
-#     with tf.GradientTape() as tape:
-#         y, policy = model(inputs, True)
-#
-#         sample_dist = sample_dist / tf.reduce_sum(sample_dist, axis=[1], keepdims=True)
-#         value_loss = tf.reduce_mean(value_loss_function(outcome, y))
-#         # print(outcome)
-#         # print(y)
-#         policy_loss = tf.reduce_mean(policy_loss_function(sample_dist, policy))
-#         loss = value_loss + policy_loss
-#
-#         grads = tape.gradient(loss, model.trainable_variables)
-#         optimizer.apply_gradients(zip(grads, model.trainable_variables))
-#
-#     if not step % 500:
-#         print(" {:>7} {:>8.4f} {:>8.4f} {:>8.4f}".format(step, loss, value_loss, policy_loss))
-#         # print(y)
-#         model.save_weights(filepath=model_file + '.h5')
-#
-#     step += 1
+        if not step % 500:
+            print('Step: {} Loss: {}'.format(step, expected_mr))
 #
 # print(" {:>7} {:>8.4f} {:>8.4f} {:>8.4f}".format(step, loss, value_loss, policy_loss))
 # model.save_weights(filepath=model_file + '.h5')

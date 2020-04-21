@@ -59,9 +59,9 @@ class ResidualNetwork(tf.keras.Model):
     def call(self, input_tensor, training=False):
         cnn_1 = self.cnn_1(input_tensor)
         rb_1 = self.rb_1(cnn_1, training)
-        # rb_2 = self.rb_1(rb_1, training)
-        # rb_3 = self.rb_1(rb_2, training)
-        cnn_flat = self.cnn_flat(rb_1)
+        rb_2 = self.rb_1(rb_1, training)
+        rb_3 = self.rb_1(rb_2, training)
+        cnn_flat = self.cnn_flat(rb_3)
 
         pi_1 = self.pi_1(cnn_flat)
         pi_1 = tf.reshape(pi_1, [-1, self.num_arms, self.dim**2])
