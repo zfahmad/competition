@@ -23,4 +23,4 @@ def marginal_utility(reward_vector):
                                     clip_value_max=tf.reduce_max(marg_utility))
     marg_utility = tf.concat([first_vals, marg_utility], axis=1)
 
-    return tf.cast(marg_utility, dtype=tf.float64)
+    return tf.cast(tf.reduce_mean(tf.reduce_sum(marg_utility, axis=1)), dtype=tf.float64)
